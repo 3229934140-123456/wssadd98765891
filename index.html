@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>码字断更助手 - 陪你日更到完结</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="logo">
+            <span class="logo-icon">✍️</span>
+            <h1>码字断更助手</h1>
+        </div>
+        <nav class="nav-tabs">
+            <button class="nav-btn active" data-tab="writing">📝 码字页</button>
+            <button class="nav-btn" data-tab="plan">📋 计划页</button>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        <section id="writing-tab" class="tab-content active">
+            <div class="writing-container">
+                <aside class="sidebar-left">
+                    <div class="work-info-card">
+                        <h3 id="work-title-display">《未命名作品》</h3>
+                        <p class="work-meta">
+                            <span id="work-platform-display">签约平台：未设置</span>
+                        </p>
+                        <p class="work-meta">
+                            <span>更新时间：</span><span id="work-update-time-display">未设置</span>
+                        </p>
+                    </div>
+
+                    <div class="goal-card">
+                        <div class="goal-header">
+                            <h4>今日目标</h4>
+                            <span class="goal-number"><span id="today-done-words">0</span> / <span id="today-goal-words">4000</span> 字</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="today-progress-fill" style="width: 0%"></div>
+                        </div>
+                        <p class="progress-text">完成度 <span id="today-progress-percent">0</span>%</p>
+                    </div>
+
+                    <div class="time-blocks">
+                        <h4>分段任务</h4>
+                        <div class="block-item morning">
+                            <div class="block-label">
+                                <span class="block-icon">🌅</span>
+                                <span>上午段（6:00-12:00）</span>
+                            </div>
+                            <div class="block-progress">
+                                <div class="block-bar">
+                                    <div class="block-fill" id="morning-fill" style="width: 0%"></div>
+                                </div>
+                                <span class="block-words"><span id="morning-done">0</span>/<span id="morning-goal">1333</span></span>
+                            </div>
+                        </div>
+                        <div class="block-item afternoon">
+                            <div class="block-label">
+                                <span class="block-icon">☀️</span>
+                                <span>下午段（12:00-18:00）</span>
+                            </div>
+                            <div class="block-progress">
+                                <div class="block-bar">
+                                    <div class="block-fill" id="afternoon-fill" style="width: 0%"></div>
+                                </div>
+                                <span class="block-words"><span id="afternoon-done">0</span>/<span id="afternoon-goal">1333</span></span>
+                            </div>
+                        </div>
+                        <div class="block-item evening">
+                            <div class="block-label">
+                                <span class="block-icon">🌙</span>
+                                <span>晚上段（18:00-24:00）</span>
+                            </div>
+                            <div class="block-progress">
+                                <div class="block-bar">
+                                    <div class="block-fill" id="evening-fill" style="width: 0%"></div>
+                                </div>
+                                <span class="block-words"><span id="evening-done">0</span>/<span id="evening-goal">1334</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="remaining-card">
+                        <div class="remaining-info">
+                            <h4>剩余字数</h4>
+                            <p class="remaining-number" id="remaining-words">4000</p>
+                        </div>
+                        <div class="eta-info">
+                            <h4>预计完成</h4>
+                            <p class="eta-number" id="eta-time">--:--</p>
+                            <p class="eta-sub">按 <span id="writing-speed">40</span> 字/分钟计算</p>
+                        </div>
+                    </div>
+                </aside>
+
+                <div class="editor-main">
+                    <div class="editor-toolbar">
+                        <div class="word-counter">
+                            当前字数：<span id="editor-word-count">0</span> 字
+                            <span class="word-diff">（本次新增 <span id="session-words">0</span> 字）</span>
+                        </div>
+                        <div class="editor-actions">
+                            <button class="btn btn-secondary" id="clear-btn">清空</button>
+                            <button class="btn btn-primary" id="save-btn">💾 保存进度</button>
+                        </div>
+                    </div>
+                    <textarea 
+                        id="writing-editor" 
+                        class="writing-editor" 
+                        placeholder="开始码字吧，今天也要加油哦~ 每一个字都是通往完结的脚印。"></textarea>
+                    <div class="chapter-input">
+                        <label for="chapter-name">章节标题：</label>
+                        <input type="text" id="chapter-name" placeholder="例如：第1章 故事的开始">
+                    </div>
+                </div>
+
+                <aside class="sidebar-right">
+                    <div class="risk-card">
+                        <div class="risk-header">
+                            <h4>📊 风险评估</h4>
+                            <span class="risk-badge" id="risk-badge">正常</span>
+                        </div>
+                        <div class="risk-content" id="risk-content">
+                            <p class="risk-ok">当前进度正常，继续保持节奏！</p>
+                        </div>
+                    </div>
+
+                    <div class="safety-card">
+                        <h4>🛡️ 存稿安全线</h4>
+                        <div class="safety-info">
+                            <div class="safety-item">
+                                <span class="safety-label">当前存稿</span>
+                                <span class="safety-value"><span id="current-stock">0</span> 章</span>
+                            </div>
+                            <div class="safety-item">
+                                <span class="safety-label">可撑天数</span>
+                                <span class="safety-value" id="stock-days">0</span> 天
+                            </div>
+                            <div class="safety-item">
+                                <span class="safety-label">安全线</span>
+                                <span class="safety-value"><span id="safety-line">3</span> 天</span>
+                            </div>
+                        </div>
+                        <div class="safety-bar">
+                            <div class="safety-bar-fill" id="safety-bar-fill" style="width: 0%"></div>
+                        </div>
+                        <p class="safety-status" id="safety-status">存稿充足</p>
+                    </div>
+
+                    <div class="history-card">
+                        <h4>📅 近7天记录</h4>
+                        <div class="history-chart" id="history-chart"></div>
+                    </div>
+
+                    <div class="tips-card">
+                        <h4>💡 陪写小贴士</h4>
+                        <p class="tips-text" id="daily-tip">专注当下，先写完今天的段落再说。</p>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="plan-tab" class="tab-content">
+            <div class="plan-container">
+                <div class="plan-section">
+                    <h2>📚 作品基本信息</h2>
+                    <div class="form-row">
+                        <label>作品名称</label>
+                        <input type="text" id="work-title" placeholder="例如：我在修仙界写日记">
+                    </div>
+                    <div class="form-row">
+                        <label>签约平台</label>
+                        <select id="work-platform">
+                            <option value="">请选择平台</option>
+                            <option value="起点中文网">起点中文网</option>
+                            <option value="晋江文学城">晋江文学城</option>
+                            <option value="番茄小说">番茄小说</option>
+                            <option value="七猫小说">七猫小说</option>
+                            <option value="纵横中文网">纵横中文网</option>
+                            <option value="17K小说网">17K小说网</option>
+                            <option value="掌阅">掌阅</option>
+                            <option value="其他">其他平台</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="plan-section">
+                    <h2>🎯 更新计划设置</h2>
+                    <div class="form-row">
+                        <label>日更目标字数</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="daily-goal" value="4000" min="500" step="500">
+                            <span class="unit">字/天</span>
+                        </div>
+                        <div class="preset-btns">
+                            <button class="preset-btn" data-goal="2000">2000</button>
+                            <button class="preset-btn" data-goal="3000">3000</button>
+                            <button class="preset-btn active" data-goal="4000">4000</button>
+                            <button class="preset-btn" data-goal="6000">6000</button>
+                            <button class="preset-btn" data-goal="8000">8000</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>固定更新时间</label>
+                        <input type="time" id="update-time" value="20:00">
+                        <p class="form-hint">建议设置在读者活跃时段</p>
+                    </div>
+                    <div class="form-row">
+                        <label>日更多少章</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="chapters-per-day" value="1" min="1" max="10">
+                            <span class="unit">章/天</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plan-section">
+                    <h2>🛡️ 存稿管理</h2>
+                    <div class="form-row">
+                        <label>当前存稿章节数</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="stock-chapters" value="3" min="0">
+                            <span class="unit">章</span>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>存稿安全线</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="safety-threshold" value="3" min="1">
+                            <span class="unit">天</span>
+                        </div>
+                        <p class="form-hint">存稿低于此天数将触发提醒</p>
+                    </div>
+                </div>
+
+                <div class="plan-section">
+                    <h2>⚙️ 码字偏好</h2>
+                    <div class="form-row">
+                        <label>平均码字速度</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="typing-speed" value="40" min="10" max="200">
+                            <span class="unit">字/分钟</span>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>启用桌面提醒</label>
+                        <label class="switch">
+                            <input type="checkbox" id="enable-notifications" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="plan-actions">
+                    <button class="btn btn-secondary" id="reset-btn">重置默认</button>
+                    <button class="btn btn-primary btn-large" id="save-plan-btn">💾 保存计划</button>
+                </div>
+
+                <div class="plan-section preview-section">
+                    <h2>👀 分段预览</h2>
+                    <p class="preview-hint">按时间段分配如下（可根据实际情况调整）</p>
+                    <div class="preview-blocks">
+                        <div class="preview-block morning">
+                            <span class="preview-icon">🌅</span>
+                            <div>
+                                <p class="preview-label">上午段</p>
+                                <p class="preview-words"><span id="preview-morning">1333</span> 字</p>
+                            </div>
+                        </div>
+                        <div class="preview-block afternoon">
+                            <span class="preview-icon">☀️</span>
+                            <div>
+                                <p class="preview-label">下午段</p>
+                                <p class="preview-words"><span id="preview-afternoon">1333</span> 字</p>
+                            </div>
+                        </div>
+                        <div class="preview-block evening">
+                            <span class="preview-icon">🌙</span>
+                            <div>
+                                <p class="preview-label">晚上段</p>
+                                <p class="preview-words"><span id="preview-evening">1334</span> 字</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="corner-toast" id="corner-toast">
+        <div class="toast-icon">⚠️</div>
+        <div class="toast-content">
+            <p class="toast-title" id="toast-title">提醒</p>
+            <p class="toast-message" id="toast-message">内容</p>
+        </div>
+        <button class="toast-close" id="toast-close">×</button>
+    </div>
+
+    <div class="modal-overlay" id="risk-modal">
+        <div class="modal">
+            <div class="modal-header danger">
+                <h3>🚨 断更风险提醒</h3>
+                <button class="modal-close" id="modal-close">×</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-cancel">稍后再说</button>
+                <button class="btn btn-primary" id="modal-confirm">我要补更</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
