@@ -112,19 +112,25 @@ function loadData() {
 function checkDateReset() {
     const today = getTodayStr();
     if (appData.lastSaveDate && appData.lastSaveDate !== today) {
-        if (appData.todayWords > 0) {
+        if (appData.todayWords > 0 || appData.morningDone > 0 || appData.afternoonDone > 0 || appData.eveningDone > 0) {
             historyData.push({
                 date: appData.lastSaveDate,
                 words: appData.todayWords,
                 goal: appData.dailyGoal,
-                chapters: appData.todayChapters || 0
+                chapters: appData.todayChapters || 0,
+                periodBreakdown: {
+                    morning: appData.morningDone || 0,
+                    afternoon: appData.afternoonDone || 0,
+                    evening: appData.eveningDone || 0
+                }
             });
         } else if (appData.lastSaveDate < today) {
             historyData.push({
                 date: appData.lastSaveDate,
                 words: 0,
                 goal: appData.dailyGoal,
-                chapters: 0
+                chapters: 0,
+                periodBreakdown: { morning: 0, afternoon: 0, evening: 0 }
             });
         }
         appData.todayWords = 0;
@@ -189,6 +195,7 @@ function checkRiskLevel() {
     const todayGoal = appData.dailyGoal;
     const todayMet = todayWords >= todayGoal;
     const yesterday = getYesterdayRecord();
+    const hasYesterday = !!yesterday;
     const yesterdayWords = yesterday ? yesterday.words : 0;
     const yesterdayGoal = yesterday ? yesterday.goal : todayGoal;
     const yesterdayMet = yesterday ? yesterdayWords >= yesterdayGoal : false;
@@ -198,23 +205,27 @@ function checkRiskLevel() {
     const hoursLeft = updateH - now.getHours();
     const todayProgress = todayGoal > 0 ? (todayWords / todayGoal) * 100 : 0;
     let level = 'normal';
-    if (!todayMet && !yesterdayMet) {
+    let twoDaysLow = false;
+    if (hasYesterday && !todayMet && !yesterdayMet) {
+        twoDaysLow = true;
         if (todayProgress < 30 && hoursLeft < 6) level = 'danger';
         else level = 'warning';
-    } else if (!todayMet && todayProgress < 50 && hoursLeft < 4) {
-        level = 'warning';
+    } else if (!todayMet) {
+        if (todayProgress < 30 && hoursLeft < 4) level = 'danger';
+        else if (todayProgress < 50 && hoursLeft < 6) level = 'warning';
     }
     return {
         level,
         todayMet,
         yesterdayMet,
+        hasYesterday,
         todayWords,
         todayGoal,
         yesterdayWords,
         yesterdayGoal,
         todayProgress,
         hoursLeft,
-        twoDaysLow: !todayMet && !yesterdayMet
+        twoDaysLow
     };
 }
 
@@ -228,18 +239,23 @@ function getDepletionDate() {
     const updateParts = appData.updateTime.split(':');
     const updateH = parseInt(updateParts[0]) || 20;
     const updateM = parseInt(updateParts[1]) || 0;
-    if (stockDays <= 0) return `今天 ${String(updateH).padStart(2, '0')}:${String(updateM).padStart(2, '0')}`;
+    const timeStr = `${String(updateH).padStart(2, '0')}:${String(updateM).padStart(2, '0')}`;
+    if (stockDays <= 0) return `今天 ${timeStr}`;
     const d = new Date();
     d.setDate(d.getDate() + stockDays);
-    return `${d.getMonth() + 1}月${d.getDate()}日 ${String(updateH).padStart(2, '0')}:${String(updateM).padStart(2, '0')}`;
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${timeStr}`;
 }
 
 function getChaptersNeeded() {
     const threshold = appData.safetyThreshold;
     const stockDays = getStockDays();
     if (stockDays >= threshold) return 0;
-    const deficit = threshold - stockDays;
-    return Math.ceil(deficit * appData.chaptersPerDay);
+    const deficitDays = threshold - stockDays;
+    const neededChapters = deficitDays * appData.chaptersPerDay;
+    const currentStock = appData.stockChapters;
+    const thresholdChapters = threshold * appData.chaptersPerDay;
+    const gap = thresholdChapters - currentStock;
+    return Math.max(0, Math.min(neededChapters, gap));
 }
 
 function showToast(title, message, type = 'info', duration = 5000) {
@@ -287,31 +303,44 @@ function showRiskModal() {
         suggestions.push(`存稿不足安全线，建议额外补写 ${chaptersNeeded} 章存稿`);
     }
     const todayPct = risk.todayGoal > 0 ? Math.round((risk.todayWords / risk.todayGoal) * 100) : 0;
-    const ydPct = risk.yesterdayGoal > 0 ? Math.round((risk.yesterdayWords / risk.yesterdayGoal) * 100) : 0;
-    const html = `
-        <h4>📊 近两日进度对比</h4>
-        <table class="risk-detail-table">
-            <thead>
-                <tr><th>日期</th><th>实际字数</th><th>目标字数</th><th>完成度</th><th>状态</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>今天</td>
-                    <td>${risk.todayWords}</td>
-                    <td>${risk.todayGoal}</td>
-                    <td class="${todayPct >= 100 ? 'highlight-ok' : 'highlight-danger'}">${todayPct}%</td>
-                    <td>${risk.todayMet ? '✅ 达标' : '❌ 未达标'}</td>
-                </tr>
-                <tr>
-                    <td>昨天</td>
-                    <td>${risk.yesterdayWords}</td>
-                    <td>${risk.yesterdayGoal}</td>
-                    <td class="${ydPct >= 100 ? 'highlight-ok' : 'highlight-danger'}">${ydPct}%</td>
-                    <td>${risk.yesterdayMet ? '✅ 达标' : '❌ 未达标'}</td>
-                </tr>
-            </tbody>
-        </table>
-        ${risk.twoDaysLow ? '<p style="color:var(--danger);font-weight:600;">⚠️ 今天和昨天均未达标，连续断更风险极高！</p>' : ''}
+    let html = '';
+    if (risk.hasYesterday) {
+        const ydPct = risk.yesterdayGoal > 0 ? Math.round((risk.yesterdayWords / risk.yesterdayGoal) * 100) : 0;
+        html += `
+            <h4>📊 近两日进度对比</h4>
+            <table class="risk-detail-table">
+                <thead>
+                    <tr><th>日期</th><th>实际字数</th><th>目标字数</th><th>完成度</th><th>状态</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>今天</td>
+                        <td>${risk.todayWords}</td>
+                        <td>${risk.todayGoal}</td>
+                        <td class="${todayPct >= 100 ? 'highlight-ok' : 'highlight-danger'}">${todayPct}%</td>
+                        <td>${risk.todayMet ? '✅ 达标' : '❌ 未达标'}</td>
+                    </tr>
+                    <tr>
+                        <td>昨天</td>
+                        <td>${risk.yesterdayWords}</td>
+                        <td>${risk.yesterdayGoal}</td>
+                        <td class="${ydPct >= 100 ? 'highlight-ok' : 'highlight-danger'}">${ydPct}%</td>
+                        <td>${risk.yesterdayMet ? '✅ 达标' : '❌ 未达标'}</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
+        if (risk.twoDaysLow) {
+            html += '<p style="color:var(--danger);font-weight:600;">⚠️ 今天和昨天均未达标，连续断更风险极高！</p>';
+        }
+    } else {
+        html += `
+            <h4>📊 今日进度</h4>
+            <p>今日完成 <strong>${risk.todayWords}</strong> / ${risk.todayGoal} 字（${todayPct}%）</p>
+            <p style="margin-top:6px;color:var(--text-muted);font-size:12px;">昨天暂无记录，暂不判定连续断更</p>
+        `;
+    }
+    html += `
         <ul class="impact-list">
             <li>${impact.fullAttendance}</li>
             <li>${impact.ranking}</li>
@@ -339,7 +368,7 @@ function addWritingSession(type, words) {
         type,
         words,
         duration,
-        chapterName: chapterName || `第${appData.todayChapters || 0}章`,
+        chapterName: chapterName || `第${(appData.todayChapters || 0) + 1}章`,
         period,
         time: formatTime(new Date(now))
     };
@@ -357,28 +386,65 @@ function renderSessionsList() {
         summary.innerHTML = '';
         return;
     }
-    const sorted = [...sessions].reverse();
-    body.innerHTML = sorted.map(s => {
-        const speed = s.duration > 0 ? Math.round(s.words / (s.duration / 60000)) : 0;
-        return `
-            <div class="session-item session-${s.type}">
-                <div class="session-top">
-                    <span class="session-type">${s.type === 'finish' ? '完成章节' : '保存进度'}</span>
-                    <span class="session-time">${s.time} · ${getPeriodLabel(s.period)}</span>
+    const groups = {};
+    const groupOrder = [];
+    sessions.forEach(s => {
+        const key = s.chapterName || '未命名';
+        if (!groups[key]) {
+            groups[key] = [];
+            groupOrder.push(key);
+        }
+        groups[key].push(s);
+    });
+    let html = '';
+    groupOrder.reverse().forEach(chName => {
+        const group = groups[chName];
+        const isFinished = group.some(s => s.type === 'finish');
+        const totalWords = group.reduce((sum, s) => sum + s.words, 0);
+        const totalTime = group.reduce((sum, s) => sum + s.duration, 0);
+        const avgSpeed = totalTime > 0 ? Math.round(totalWords / (totalTime / 60000)) : 0;
+        const headerClass = isFinished ? 'scg-header' : 'scg-header scg-in-progress';
+        html += `
+            <div class="session-chapter-group">
+                <div class="${headerClass}" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+                    <span class="scg-title">${isFinished ? '✅' : '📝'} ${chName}</span>
+                    <span class="scg-summary">
+                        <span>${group.length}次</span>
+                        <span>${totalWords}字</span>
+                        <span>${formatDuration(totalTime)}</span>
+                        ${avgSpeed > 0 ? `<span>${avgSpeed}字/分</span>` : ''}
+                    </span>
                 </div>
-                <p class="session-words">+${s.words} 字</p>
-                <p class="session-meta">${s.chapterName ? '「' + s.chapterName + '」· ' : ''}用时${formatDuration(s.duration)}${speed > 0 ? ' · ' + speed + '字/分' : ''}</p>
-            </div>
+                <div class="scg-sessions${isFinished ? ' collapsed' : ''}">
         `;
-    }).join('');
+        group.slice().reverse().forEach(s => {
+            const speed = s.duration > 0 ? Math.round(s.words / (s.duration / 60000)) : 0;
+            html += `
+                <div class="session-item session-${s.type}">
+                    <div class="session-top">
+                        <span class="session-type">${s.type === 'finish' ? '完成章节' : '保存进度'}</span>
+                        <span class="session-time">${s.time} · ${getPeriodLabel(s.period)}</span>
+                    </div>
+                    <p class="session-words">+${s.words} 字</p>
+                    <p class="session-meta">用时${formatDuration(s.duration)}${speed > 0 ? ' · ' + speed + '字/分' : ''}</p>
+                </div>
+            `;
+        });
+        html += '</div></div>';
+    });
+    body.innerHTML = html;
     const totalWords = sessions.reduce((sum, s) => sum + s.words, 0);
     const totalTime = sessions.reduce((sum, s) => sum + s.duration, 0);
     const avgSpeed = totalTime > 0 ? Math.round(totalWords / (totalTime / 60000)) : 0;
     summary.innerHTML = `
-        <span>共 ${sessions.length} 次写作</span>
+        <span>共 ${sessions.length} 次</span>
         <span>总用时 ${formatDuration(totalTime)}</span>
         <span>均速 ${avgSpeed} 字/分</span>
     `;
+}
+
+function getWeekDayShort(date) {
+    return ['日', '一', '二', '三', '四', '五', '六'][date.getDay()];
 }
 
 function renderWeeklyReview() {
@@ -390,50 +456,86 @@ function renderWeeklyReview() {
         const dateStr = getDateStr(d);
         let words = 0;
         let goal = appData.dailyGoal;
+        let morning = 0, afternoon = 0, evening = 0;
         const isToday = i === 0;
         if (isToday) {
             words = appData.todayWords;
+            morning = appData.morningDone;
+            afternoon = appData.afternoonDone;
+            evening = appData.eveningDone;
         } else {
             const record = historyData.find(h => h.date === dateStr);
             if (record) {
                 words = record.words;
                 goal = record.goal || appData.dailyGoal;
+                if (record.periodBreakdown) {
+                    morning = record.periodBreakdown.morning || 0;
+                    afternoon = record.periodBreakdown.afternoon || 0;
+                    evening = record.periodBreakdown.evening || 0;
+                }
             }
         }
-        days.push({ words, goal, dateStr, isToday });
+        days.push({ words, goal, dateStr, isToday, morning, afternoon, evening, weekday: getWeekDayShort(d), dayNum: d.getDate() });
     }
     const doneDays = days.filter(d => d.words >= d.goal).length;
     const totalWords = days.reduce((s, d) => s + d.words, 0);
     const avgPct = days.length > 0 ? Math.round(days.reduce((s, d) => s + (d.goal > 0 ? Math.min(100, (d.words / d.goal) * 100) : 0), 0) / days.length) : 0;
-    const morningSum = appData.morningDone;
-    const afternoonSum = appData.afternoonDone;
-    const eveningSum = appData.eveningDone;
-    historyData.slice(-7).forEach(r => {
-        if (r.periodBreakdown) {
-            morningSum += r.periodBreakdown.morning || 0;
-            afternoonSum += r.periodBreakdown.afternoon || 0;
-            eveningSum += r.periodBreakdown.evening || 0;
-        }
-    });
-    const periodTotals = [
-        { name: '上午段', val: morningSum },
-        { name: '下午段', val: afternoonSum },
-        { name: '晚上段', val: eveningSum }
+    const split = splitDailyGoal(appData.dailyGoal);
+    const periodData = [
+        { name: '上午段', key: 'morning', total: 0, goalPerDay: split.morning },
+        { name: '下午段', key: 'afternoon', total: 0, goalPerDay: split.afternoon },
+        { name: '晚上段', key: 'evening', total: 0, goalPerDay: split.evening }
     ];
-    const periodGoals = [appData.morningGoal, appData.afternoonGoal, appData.eveningGoal];
+    days.forEach(d => {
+        periodData[0].total += d.morning;
+        periodData[1].total += d.afternoon;
+        periodData[2].total += d.evening;
+    });
     let weakPeriod = '晚上段';
     let weakestRatio = Infinity;
-    periodTotals.forEach((p, i) => {
-        const ratio = periodGoals[i] > 0 ? p.val / (periodGoals[i] * 7) : 1;
-        if (ratio < weakestRatio) {
-            weakestRatio = ratio;
-            weakPeriod = p.name;
+    periodData.forEach(p => {
+        if (p.goalPerDay > 0) {
+            const ratio = p.total / (p.goalPerDay * 7);
+            if (ratio < weakestRatio) {
+                weakestRatio = ratio;
+                weakPeriod = p.name;
+            }
         }
     });
     document.getElementById('wr-done-days').textContent = `${doneDays} / 7`;
     document.getElementById('wr-total-words').textContent = totalWords >= 10000 ? (totalWords / 10000).toFixed(1) + '万' : totalWords;
     document.getElementById('wr-avg-pct').textContent = `${avgPct}%`;
     document.getElementById('wr-weak-period').textContent = weakPeriod;
+    const detailEl = document.getElementById('wr-days-detail');
+    let detailHtml = '';
+    days.slice().reverse().forEach((d, idx) => {
+        const met = d.words >= d.goal;
+        const hasData = d.words > 0;
+        const statusCls = met ? 'status-done' : (hasData ? 'status-partial' : 'status-miss');
+        const statusText = met ? '✅达标' : (hasData ? '⚠️未达标' : '❌断更');
+        const labelCls = d.isToday ? 'wr-day-label wr-today-label' : 'wr-day-label';
+        const pct = d.goal > 0 ? Math.round((d.words / d.goal) * 100) : 0;
+        const dateKey = d.dateStr;
+        const mPct = d.morning > 0 ? Math.round((d.morning / split.morning) * 100) : 0;
+        const aPct = d.afternoon > 0 ? Math.round((d.afternoon / split.afternoon) * 100) : 0;
+        const ePct = d.evening > 0 ? Math.round((d.evening / split.evening) * 100) : 0;
+        detailHtml += `
+            <div class="wr-day-row" onclick="document.getElementById('wr-expand-${dateKey}').classList.toggle('show')">
+                <span class="${labelCls}">${d.isToday ? '今天' : '周' + d.weekday}</span>
+                <div class="wr-day-periods">
+                    <span class="wr-period-chip period-morning">🌅${d.morning}</span>
+                    <span class="wr-period-chip period-afternoon">☀️${d.afternoon}</span>
+                    <span class="wr-period-chip period-evening">🌙${d.evening}</span>
+                </div>
+                <span class="wr-day-status ${statusCls}">${statusText}</span>
+            </div>
+            <div class="wr-day-expand" id="wr-expand-${dateKey}">
+                <p>总字数：<strong>${d.words}</strong> / ${d.goal}（${pct}%）</p>
+                <p>🌅 上午 ${d.morning}字（${mPct}%） ｜ ☀️ 下午 ${d.afternoon}字（${aPct}%） ｜ 🌙 晚上 ${d.evening}字（${ePct}%）</p>
+            </div>
+        `;
+    });
+    detailEl.innerHTML = detailHtml;
     const suggestions = [];
     if (doneDays >= 5) {
         suggestions.push(`本周表现优秀，${doneDays}天达标，继续保持！`);
@@ -458,6 +560,79 @@ function renderWeeklyReview() {
         <h4>🎯 下周目标建议</h4>
         <ul>${suggestions.map(s => `<li>${s}</li>`).join('')}</ul>
     `;
+}
+
+function renderStockSchedule() {
+    const scheduleEl = document.getElementById('stock-schedule');
+    const deficitEl = document.getElementById('stock-deficit');
+    const updateParts = appData.updateTime.split(':');
+    const updateH = parseInt(updateParts[0]) || 20;
+    const updateM = parseInt(updateParts[1]) || 0;
+    const timeStr = `${String(updateH).padStart(2, '0')}:${String(updateM).padStart(2, '0')}`;
+    const cpd = appData.chaptersPerDay || 1;
+    let remainingStock = appData.stockChapters || 0;
+    let html = '';
+    const today = new Date();
+    let deficitChapters = 0;
+    const thresholdChapters = appData.safetyThreshold * cpd;
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() + i);
+        const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+        const weekday = getWeekDayShort(d);
+        const isToday = i === 0;
+        const available = remainingStock;
+        const needed = cpd;
+        let statusCls = 'schedule-day';
+        if (isToday) statusCls += ' sd-today';
+        if (available >= needed) {
+            statusCls += ' sd-safe';
+        } else if (available > 0) {
+            statusCls += ' sd-warning';
+        } else {
+            statusCls += ' sd-danger';
+        }
+        let chaptersInfo = '';
+        if (available >= needed) {
+            chaptersInfo = `<span class="chapter-source">存稿×${needed}</span>`;
+        } else if (available > 0) {
+            chaptersInfo = `<span class="chapter-source">存稿×${available}</span> <span class="chapter-gap">缺×${needed - available}</span>`;
+        } else {
+            chaptersInfo = `<span class="chapter-gap">缺×${needed}</span>`;
+            if (i > 0) deficitChapters += needed;
+        }
+        html += `
+            <div class="${statusCls}">
+                <div class="sd-date">${dateStr} 周${weekday}</div>
+                <div class="sd-chapters">${chaptersInfo}</div>
+            </div>
+        `;
+        remainingStock = Math.max(0, remainingStock - needed);
+    }
+    scheduleEl.innerHTML = html;
+    const safeDays = getStockDays();
+    const needed = getChaptersNeeded();
+    let deficitHtml = '';
+    if (safeDays >= appData.safetyThreshold * 2) {
+        deficitHtml = `<h4>✅ 存稿充足</h4><p>当前存稿可撑 ${safeDays} 天，远超安全线 ${appData.safetyThreshold} 天。</p>`;
+        deficitEl.style.background = 'linear-gradient(135deg, #f0fdf4, #dcfce7)';
+        deficitEl.style.borderColor = '#bbf7d0';
+    } else if (safeDays >= appData.safetyThreshold) {
+        deficitHtml = `<h4>✅ 存稿尚可</h4><p>当前存稿可撑 ${safeDays} 天，达到安全线。</p>`;
+        deficitEl.style.background = 'linear-gradient(135deg, #f0fdf4, #dcfce7)';
+        deficitEl.style.borderColor = '#bbf7d0';
+    } else {
+        const depletionDate = getDepletionDate();
+        deficitHtml = `<h4>⚠️ 存稿不足安全线</h4>`;
+        deficitHtml += `<p>当前存稿 ${appData.stockChapters} 章 → 可撑 ${safeDays} 天 → ${depletionDate} 断粮</p>`;
+        deficitHtml += `<p>安全线需 ${thresholdChapters} 章（${appData.safetyThreshold}天×${cpd}章/天），还差 <strong>${thresholdChapters - appData.stockChapters}</strong> 章</p>`;
+        if (needed > 0) {
+            deficitHtml += `<p>建议补写 <strong>${needed}</strong> 章即可达到安全线</p>`;
+        }
+        deficitEl.style.background = 'linear-gradient(135deg, #fffbeb, #fef3c7)';
+        deficitEl.style.borderColor = '#fde68a';
+    }
+    deficitEl.innerHTML = deficitHtml;
 }
 
 function renderWritingUI() {
@@ -520,10 +695,19 @@ function renderRiskCard() {
         content.innerHTML = `
             <p class="risk-${risk.level}">⚠️ 连续两天未达标</p>
             <p style="margin-top:6px;font-size:12px;">
-                今天 <strong>${risk.todayWords}</strong>/${risk.todayGoal} ｜ 
+                今天 <strong>${risk.todayWords}</strong>/${risk.todayGoal} ｜
                 昨天 <strong>${risk.yesterdayWords}</strong>/${risk.yesterdayGoal}
             </p>
             <button class="btn btn-primary" style="margin-top:10px;padding:6px 12px;font-size:12px;" onclick="showRiskModal()">查看差距与补更建议</button>
+        `;
+    } else if (!risk.todayMet && !risk.hasYesterday) {
+        badge.textContent = '注意';
+        badge.classList.add('warning');
+        const remaining = Math.max(0, risk.todayGoal - risk.todayWords);
+        content.innerHTML = `
+            <p class="risk-warning">⚠️ 今日进度偏慢，还差 ${remaining} 字</p>
+            <p style="margin-top:6px;font-size:12px;color:var(--text-muted);">昨天暂无记录，暂不判定连续断更</p>
+            <p style="margin-top:6px;">建议集中精力完成今日更新。</p>
         `;
     } else if (risk.level === 'normal') {
         badge.textContent = '正常';
@@ -533,10 +717,10 @@ function renderRiskCard() {
         badge.textContent = '注意';
         badge.classList.add('warning');
         const remaining = Math.max(0, risk.todayGoal - risk.todayWords);
-        const yesterdayInfo = risk.yesterdayMet ? '昨日已达标' : `昨日仅写 ${risk.yesterdayWords} 字（未达标）`;
+        const yesterdayInfo = risk.hasYesterday ? (risk.yesterdayMet ? '昨日已达标' : `昨日仅写 ${risk.yesterdayWords} 字（未达标）`) : '';
         content.innerHTML = `
             <p class="risk-warning">⚠️ 进度偏慢，今日还差 ${remaining} 字</p>
-            <p style="margin-top:6px;font-size:12px;">${yesterdayInfo}</p>
+            ${yesterdayInfo ? `<p style="margin-top:6px;font-size:12px;">${yesterdayInfo}</p>` : ''}
             <p style="margin-top:6px;">建议集中精力，尽快完成今日段落。</p>
         `;
     } else {
@@ -611,18 +795,12 @@ function renderHistoryChart() {
         let goal = appData.dailyGoal;
         if (i === 0) {
             words = appData.todayWords;
-            goal = appData.dailyGoal;
         } else if (record) {
             words = record.words;
             goal = record.goal || appData.dailyGoal;
         }
         if (words > maxWords) maxWords = words;
-        bars.push({
-            label: weekDays[d.getDay()],
-            words,
-            isToday: i === 0,
-            goal
-        });
+        bars.push({ label: weekDays[d.getDay()], words, isToday: i === 0, goal });
     }
     chart.innerHTML = bars.map(b => {
         const height = Math.max(4, (b.words / maxWords) * 80);
@@ -670,7 +848,6 @@ function renderCalendar() {
             let goal = appData.dailyGoal;
             if (isToday) {
                 words = appData.todayWords;
-                goal = appData.dailyGoal;
             } else {
                 const record = historyData.find(h => h.date === dateStr);
                 if (record) {
@@ -678,16 +855,10 @@ function renderCalendar() {
                     goal = record.goal || appData.dailyGoal;
                 }
             }
-            if (words >= goal) {
-                cls += ' cal-done';
-            } else if (words > 0) {
-                cls += ' cal-partial';
-            } else {
-                cls += ' cal-miss';
-            }
-            if (words > 0) {
-                wordsLabel = `<span class="cal-day-words">${words >= 1000 ? (words / 1000).toFixed(1) + 'k' : words}</span>`;
-            }
+            if (words >= goal) cls += ' cal-done';
+            else if (words > 0) cls += ' cal-partial';
+            else cls += ' cal-miss';
+            if (words > 0) wordsLabel = `<span class="cal-day-words">${words >= 1000 ? (words / 1000).toFixed(1) + 'k' : words}</span>`;
         }
         if (isToday) cls += ' cal-today';
         html += `<div class="${cls}" data-date="${dateStr}" onclick="showCalendarDetail('${dateStr}')"><span class="cal-day-num">${d}</span>${wordsLabel}</div>`;
@@ -702,43 +873,44 @@ function showCalendarDetail(dateStr) {
     const parts = dateStr.split('-');
     titleEl.textContent = `${parseInt(parts[1])}月${parseInt(parts[2])}日`;
     const todayStr = getTodayStr();
-    let words = 0;
-    let goal = appData.dailyGoal;
-    let chapters = 0;
+    let words = 0, goal = appData.dailyGoal, chapters = 0;
+    let morning = 0, afternoon = 0, evening = 0;
+    const split = splitDailyGoal(goal);
     if (dateStr === todayStr) {
         words = appData.todayWords;
-        goal = appData.dailyGoal;
         chapters = appData.todayChapters || 0;
+        morning = appData.morningDone;
+        afternoon = appData.afternoonDone;
+        evening = appData.eveningDone;
     } else {
         const record = historyData.find(h => h.date === dateStr);
         if (record) {
             words = record.words;
             goal = record.goal || appData.dailyGoal;
             chapters = record.chapters || 0;
+            if (record.periodBreakdown) {
+                morning = record.periodBreakdown.morning || 0;
+                afternoon = record.periodBreakdown.afternoon || 0;
+                evening = record.periodBreakdown.evening || 0;
+            }
         }
     }
     const pct = goal > 0 ? Math.round((words / goal) * 100) : 0;
     const isFuture = new Date(dateStr) > new Date();
-    let statusText = '';
-    let statusClass = '';
-    if (isFuture) {
-        statusText = '📅 尚未到来';
-        statusClass = 'color:var(--text-muted)';
-    } else if (words >= goal) {
-        statusText = '✅ 达标';
-        statusClass = 'color:var(--success)';
-    } else if (words > 0) {
-        statusText = '⚠️ 未达标';
-        statusClass = 'color:var(--warning)';
-    } else {
-        statusText = '❌ 断更';
-        statusClass = 'color:var(--danger)';
-    }
+    let statusText = '', statusClass = '';
+    if (isFuture) { statusText = '📅 尚未到来'; statusClass = 'color:var(--text-muted)'; }
+    else if (words >= goal) { statusText = '✅ 达标'; statusClass = 'color:var(--success)'; }
+    else if (words > 0) { statusText = '⚠️ 未达标'; statusClass = 'color:var(--warning)'; }
+    else { statusText = '❌ 断更'; statusClass = 'color:var(--danger)'; }
+    const mPct = split.morning > 0 && morning > 0 ? Math.round((morning / split.morning) * 100) : 0;
+    const aPct = split.afternoon > 0 && afternoon > 0 ? Math.round((afternoon / split.afternoon) * 100) : 0;
+    const ePct = split.evening > 0 && evening > 0 ? Math.round((evening / split.evening) * 100) : 0;
     bodyEl.innerHTML = `
         <p><strong>目标字数：</strong>${goal} 字</p>
-        <p><strong>实际字数：</strong>${words} 字</p>
-        <p><strong>完成度：</strong>${pct}%</p>
+        <p><strong>实际字数：</strong>${words} 字（${pct}%）</p>
         ${chapters > 0 ? `<p><strong>完成章节：</strong>${chapters} 章</p>` : ''}
+        <p style="margin-top:8px;"><strong>时段明细：</strong></p>
+        <p>🌅 上午 ${morning}字（${mPct}%） ｜ ☀️ 下午 ${afternoon}字（${aPct}%） ｜ 🌙 晚上 ${evening}字（${ePct}%）</p>
         <p style="${statusClass};font-weight:600;margin-top:8px;">${statusText}</p>
     `;
     detail.style.display = 'block';
@@ -760,6 +932,7 @@ function renderPlanUI() {
     updatePreviewBlocks();
     renderCalendar();
     renderWeeklyReview();
+    renderStockSchedule();
 }
 
 function updatePreviewBlocks() {
@@ -814,7 +987,7 @@ function saveProgress(showMsg = true) {
         }
     }
     const risk = checkRiskLevel();
-    if (risk.level === 'danger' || risk.twoDaysLow) {
+    if (risk.twoDaysLow || risk.level === 'danger') {
         setTimeout(showRiskModal, 600);
     }
     const stockDays = getStockDays();
@@ -849,7 +1022,7 @@ function finishChapter() {
     renderWritingUI();
     showToast('本章完成', `第 ${appData.todayChapters} 章已保存（+${increment}字），累计今日 ${appData.todayWords} 字。继续写下一章吧！`, 'info', 4000);
     const risk = checkRiskLevel();
-    if (risk.level === 'danger' || risk.twoDaysLow) {
+    if (risk.twoDaysLow || risk.level === 'danger') {
         setTimeout(showRiskModal, 800);
     }
 }
@@ -953,6 +1126,7 @@ function initPlan() {
         }
         saveData();
         renderWritingUI();
+        renderStockSchedule();
         showToast('计划已保存', '您的写作计划已更新，坚持就是胜利！', 'info', 3000);
         setTimeout(() => {
             document.querySelector('[data-tab="writing"]').click();
@@ -978,19 +1152,13 @@ function initPlan() {
     });
     document.getElementById('cal-prev').addEventListener('click', () => {
         calendarMonth--;
-        if (calendarMonth < 0) {
-            calendarMonth = 11;
-            calendarYear--;
-        }
+        if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
         renderCalendar();
         document.getElementById('calendar-detail').style.display = 'none';
     });
     document.getElementById('cal-next').addEventListener('click', () => {
         calendarMonth++;
-        if (calendarMonth > 11) {
-            calendarMonth = 0;
-            calendarYear++;
-        }
+        if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
         renderCalendar();
         document.getElementById('calendar-detail').style.display = 'none';
     });
@@ -1018,9 +1186,7 @@ function initModals() {
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then(p => {
-            notificationPermission = p;
-        });
+        Notification.requestPermission().then(p => { notificationPermission = p; });
     } else if ('Notification' in window) {
         notificationPermission = Notification.permission;
     }
@@ -1030,7 +1196,7 @@ function initPeriodicCheck() {
     setInterval(() => {
         const risk = checkRiskLevel();
         const todayKey = getTodayStr();
-        if ((risk.level === 'danger' || risk.twoDaysLow) && initPeriodicCheck._lastModal !== todayKey) {
+        if ((risk.twoDaysLow || risk.level === 'danger') && initPeriodicCheck._lastModal !== todayKey) {
             const now = new Date();
             const updateParts = appData.updateTime.split(':');
             if (now.getHours() >= parseInt(updateParts[0]) - 2 && appData.todayWords < appData.dailyGoal * 0.5) {
@@ -1051,7 +1217,7 @@ function init() {
     requestNotificationPermission();
     setTimeout(() => {
         const risk = checkRiskLevel();
-        if (risk.level === 'danger' || risk.twoDaysLow) {
+        if (risk.twoDaysLow || risk.level === 'danger') {
             showRiskModal();
         } else if (risk.level === 'warning') {
             showToast('进度提醒', '今天的更新任务还没完成哦~', 'warning', 4000);
