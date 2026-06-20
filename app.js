@@ -377,6 +377,94 @@ function addWritingSession(type, words) {
     currentSessionStartTime = now;
 }
 
+function renderChapterAnalysis() {
+    const el = document.getElementById('chapter-analysis');
+    const sessions = appData.todaySessions || [];
+    if (sessions.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+    const groups = {};
+    sessions.forEach(s => {
+        const key = s.chapterName || '未命名';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+    });
+    const chapters = [];
+    Object.keys(groups).forEach(chName => {
+        const group = groups[chName];
+        const isFinished = group.some(s => s.type === 'finish');
+        const totalWords = group.reduce((sum, s) => sum + s.words, 0);
+        const totalTime = group.reduce((sum, s) => sum + s.duration, 0);
+        const avgSpeed = totalTime > 0 ? Math.round(totalWords / (totalTime / 60000)) : 0;
+        chapters.push({ name: chName, count: group.length, totalTime, totalWords, avgSpeed, isFinished });
+    });
+    if (chapters.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+    const slowest = chapters.reduce((a, b) => (a.avgSpeed > 0 && (b.avgSpeed === 0 || a.avgSpeed < b.avgSpeed)) ? a : b, chapters[0]);
+    const mostSaves = chapters.reduce((a, b) => a.count > b.count ? a : b, chapters[0]);
+    const longest = chapters.reduce((a, b) => a.totalTime > b.totalTime ? a : b, chapters[0]);
+    let hasSlowChapter = false;
+    let slowAlertName = '';
+    if (slowest && slowest.avgSpeed > 0 && slowest.avgSpeed < appData.typingSpeed * 0.6 && slowest.totalTime > 30 * 60000) {
+        hasSlowChapter = true;
+        slowAlertName = slowest.name;
+    }
+    let html = `
+        <div class="ca-title">
+            <span>📈 今日章节复盘</span>
+            ${hasSlowChapter ? `<span class="ca-alert">⚠️ ${slowAlertName} 卡文</span>` : ''}
+        </div>
+        <div class="ca-items">
+    `;
+    if (chapters.length > 0 && longest.totalTime > 0) {
+        html += `
+            <div class="ca-item" onclick="scrollToChapterGroup('${longest.name}')">
+                <span class="ca-item-label">⏱️ 卡最久</span>
+                <span class="ca-item-value">${longest.name}</span>
+                <span class="ca-item-badge">${formatDuration(longest.totalTime)}</span>
+            </div>
+        `;
+    }
+    if (chapters.length > 0 && mostSaves.count >= 3) {
+        html += `
+            <div class="ca-item" onclick="scrollToChapterGroup('${mostSaves.name}')">
+                <span class="ca-item-label">💾 保存最多</span>
+                <span class="ca-item-value">${mostSaves.name}</span>
+                <span class="ca-item-badge">${mostSaves.count}次</span>
+            </div>
+        `;
+    }
+    if (chapters.length > 0 && slowest.avgSpeed > 0) {
+        html += `
+            <div class="ca-item" onclick="scrollToChapterGroup('${slowest.name}')">
+                <span class="ca-item-label">🐢 均速最低</span>
+                <span class="ca-item-value">${slowest.name}</span>
+                <span class="ca-item-badge">${slowest.avgSpeed}字/分</span>
+            </div>
+        `;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function scrollToChapterGroup(chapterName) {
+    const el = document.getElementById('sessions-body');
+    const groups = el.querySelectorAll('.session-chapter-group');
+    groups.forEach(g => {
+        const titleEl = g.querySelector('.scg-title');
+        if (titleEl && titleEl.textContent.includes(chapterName)) {
+            const sessionsEl = g.querySelector('.scg-sessions');
+            if (sessionsEl) sessionsEl.classList.remove('collapsed');
+            g.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            g.style.boxShadow = '0 0 0 2px var(--accent)';
+            setTimeout(() => { g.style.boxShadow = ''; }, 1500);
+        }
+    });
+}
+
 function renderSessionsList() {
     const body = document.getElementById('sessions-body');
     const summary = document.getElementById('sessions-summary');
@@ -417,15 +505,22 @@ function renderSessionsList() {
                 </div>
                 <div class="scg-sessions${isFinished ? ' collapsed' : ''}">
         `;
-        group.slice().reverse().forEach(s => {
+        let lastTime = null;
+        group.slice().reverse().forEach((s, idx) => {
             const speed = s.duration > 0 ? Math.round(s.words / (s.duration / 60000)) : 0;
+            const wordsLabel = s.words > 0 ? `+${s.words} 字` : `完成标记`;
+            let timelineLabel = '';
+            if (idx === group.length - 1) {
+                timelineLabel = '<span class="session-timeline-start">📌 章节开始</span>';
+            }
             html += `
                 <div class="session-item session-${s.type}">
                     <div class="session-top">
-                        <span class="session-type">${s.type === 'finish' ? '完成章节' : '保存进度'}</span>
+                        <span class="session-type">${s.type === 'finish' ? '✅ 完成章节' : '💾 保存进度'}</span>
                         <span class="session-time">${s.time} · ${getPeriodLabel(s.period)}</span>
                     </div>
-                    <p class="session-words">+${s.words} 字</p>
+                    ${timelineLabel ? `<p style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">${timelineLabel}</p>` : ''}
+                    <p class="session-words">${wordsLabel}</p>
                     <p class="session-meta">用时${formatDuration(s.duration)}${speed > 0 ? ' · ' + speed + '字/分' : ''}</p>
                 </div>
             `;
@@ -441,6 +536,7 @@ function renderSessionsList() {
         <span>总用时 ${formatDuration(totalTime)}</span>
         <span>均速 ${avgSpeed} 字/分</span>
     `;
+    renderChapterAnalysis();
 }
 
 function getWeekDayShort(date) {
@@ -570,6 +666,8 @@ function renderStockSchedule() {
     const updateM = parseInt(updateParts[1]) || 0;
     const timeStr = `${String(updateH).padStart(2, '0')}:${String(updateM).padStart(2, '0')}`;
     const cpd = appData.chaptersPerDay || 1;
+    const now = new Date();
+    const isBeforeUpdateToday = now.getHours() < updateH || (now.getHours() === updateH && now.getMinutes() < updateM);
     let remainingStock = appData.stockChapters || 0;
     let html = '';
     const today = new Date();
@@ -581,33 +679,53 @@ function renderStockSchedule() {
         const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
         const weekday = getWeekDayShort(d);
         const isToday = i === 0;
-        const available = remainingStock;
+        const stockBefore = remainingStock;
         const needed = cpd;
+        const fromStock = Math.min(stockBefore, needed);
+        const needWrite = needed - fromStock;
         let statusCls = 'schedule-day';
         if (isToday) statusCls += ' sd-today';
-        if (available >= needed) {
+        if (stockBefore >= needed) {
             statusCls += ' sd-safe';
-        } else if (available > 0) {
+        } else if (stockBefore > 0) {
             statusCls += ' sd-warning';
         } else {
             statusCls += ' sd-danger';
         }
-        let chaptersInfo = '';
-        if (available >= needed) {
-            chaptersInfo = `<span class="chapter-source">存稿×${needed}</span>`;
-        } else if (available > 0) {
-            chaptersInfo = `<span class="chapter-source">存稿×${available}</span> <span class="chapter-gap">缺×${needed - available}</span>`;
-        } else {
-            chaptersInfo = `<span class="chapter-gap">缺×${needed}</span>`;
-            if (i > 0) deficitChapters += needed;
+        let chaptersHtml = '<div class="sd-chapters-list">';
+        for (let j = 0; j < cpd; j++) {
+            const isFromStock = j < fromStock;
+            if (cpd === 1) {
+                const cls = isFromStock ? 'from-stock' : 'need-write';
+                const label = isFromStock ? `📦 存稿` : `✍️ 现写`;
+                chaptersHtml += `<div class="sd-chapter-item ${cls}">${label}</div>`;
+            } else {
+                const cls = isFromStock ? 'from-stock' : 'need-write';
+                const label = isFromStock ? `📦 第${j+1}章(存稿)` : `✍️ 第${j+1}章(现写)`;
+                chaptersHtml += `<div class="sd-chapter-item ${cls}">${label}</div>`;
+            }
+        }
+        chaptersHtml += '</div>';
+        const stockAfter = Math.max(0, stockBefore - needed);
+        let stockBeforeLabel = '';
+        if (isToday) {
+            if (isBeforeUpdateToday) {
+                stockBeforeLabel = `<div class="sd-stock-before">更新前存稿: ${stockBefore}章</div>`;
+            } else {
+                stockBeforeLabel = `<div class="sd-stock-before">今日已更新</div>`;
+            }
         }
         html += `
             <div class="${statusCls}">
+                <div class="sd-time">⏰ ${timeStr}</div>
                 <div class="sd-date">${dateStr} 周${weekday}</div>
-                <div class="sd-chapters">${chaptersInfo}</div>
+                ${chaptersHtml}
+                ${stockBeforeLabel}
+                <div class="sd-stock-after">更新后剩: ${stockAfter}章</div>
             </div>
         `;
-        remainingStock = Math.max(0, remainingStock - needed);
+        remainingStock = stockAfter;
+        if (needWrite > 0 && i > 0) deficitChapters += needWrite;
     }
     scheduleEl.innerHTML = html;
     const safeDays = getStockDays();
@@ -633,6 +751,199 @@ function renderStockSchedule() {
         deficitEl.style.borderColor = '#fde68a';
     }
     deficitEl.innerHTML = deficitHtml;
+}
+
+function switchReviewView(view) {
+    document.querySelectorAll('.wr-view-switch .btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+    });
+    document.getElementById('wr-week-view').style.display = view === 'week' ? 'block' : 'none';
+    document.getElementById('wr-month-view').style.display = view === 'month' ? 'block' : 'none';
+    if (view === 'month') {
+        renderMonthlyReview();
+    } else {
+        renderWeeklyReview();
+    }
+}
+
+function getWeekRange(dayInWeek) {
+    const d = new Date(dayInWeek);
+    const day = d.getDay() || 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - day + 1);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { start: monday, end: sunday };
+}
+
+function renderMonthlyReview() {
+    const listEl = document.getElementById('month-weeks-list');
+    const sugEl = document.getElementById('monthly-suggestion');
+    const today = new Date();
+    const weeks = [];
+    let cursor = new Date(today);
+    for (let w = 0; w < 4; w++) {
+        const { start, end } = getWeekRange(cursor);
+        const weekDays = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + i);
+            const dateStr = getDateStr(d);
+            let words = 0, goal = appData.dailyGoal, chapters = 0;
+            let morning = 0, afternoon = 0, evening = 0;
+            const isToday = dateStr === getTodayStr();
+            const isFuture = d > today;
+            if (isToday) {
+                words = appData.todayWords;
+                morning = appData.morningDone;
+                afternoon = appData.afternoonDone;
+                evening = appData.eveningDone;
+                chapters = appData.todayChapters || 0;
+            } else if (!isFuture) {
+                const record = historyData.find(h => h.date === dateStr);
+                if (record) {
+                    words = record.words;
+                    goal = record.goal || appData.dailyGoal;
+                    chapters = record.chapters || 0;
+                    if (record.periodBreakdown) {
+                        morning = record.periodBreakdown.morning || 0;
+                        afternoon = record.periodBreakdown.afternoon || 0;
+                        evening = record.periodBreakdown.evening || 0;
+                    }
+                }
+            }
+            weekDays.push({ dateStr, d, words, goal, chapters, morning, afternoon, evening, isToday, isFuture });
+        }
+        const validDays = weekDays.filter(d => !d.isFuture);
+        const doneDays = validDays.filter(d => d.words >= d.goal).length;
+        const totalWords = validDays.reduce((s, d) => s + d.words, 0);
+        const avgPct = validDays.length > 0 ? Math.round(validDays.reduce((s, d) => s + (d.goal > 0 ? Math.min(100, (d.words / d.goal) * 100) : 0), 0) / validDays.length) : 0;
+        const split = splitDailyGoal(appData.dailyGoal);
+        const periodData = [
+            { name: '上午段', key: 'morning', total: 0, goalPerDay: split.morning },
+            { name: '下午段', key: 'afternoon', total: 0, goalPerDay: split.afternoon },
+            { name: '晚上段', key: 'evening', total: 0, goalPerDay: split.evening }
+        ];
+        validDays.forEach(d => {
+            periodData[0].total += d.morning;
+            periodData[1].total += d.afternoon;
+            periodData[2].total += d.evening;
+        });
+        let weakPeriod = '--';
+        if (validDays.length > 0) {
+            let weakestRatio = Infinity;
+            periodData.forEach(p => {
+                if (p.goalPerDay > 0) {
+                    const ratio = p.total / (p.goalPerDay * validDays.length);
+                    if (ratio < weakestRatio) {
+                        weakestRatio = ratio;
+                        weakPeriod = p.name;
+                    }
+                }
+            });
+        }
+        weeks.push({ start, end, days: weekDays, validDays, doneDays, totalWords, avgPct, weakPeriod, isCurrentWeek: w === 0 });
+        cursor.setDate(start.getDate() - 7);
+    }
+    let html = '';
+    weeks.forEach((week, idx) => {
+        const startStr = `${week.start.getMonth() + 1}/${week.start.getDate()}`;
+        const endStr = `${week.end.getMonth() + 1}/${week.end.getDate()}`;
+        const wordsDisplay = week.totalWords >= 10000 ? (week.totalWords / 10000).toFixed(1) + '万' : week.totalWords;
+        const weekCls = idx === 0 ? '' : 'collapsed';
+        html += `
+            <div class="mw-week ${weekCls}">
+                <div class="mw-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <div>
+                        <span class="mw-date-range">${week.isCurrentWeek ? '⭐ 本周' : ''} ${startStr} - ${endStr}</span>
+                        <span class="mw-toggle">▼</span>
+                    </div>
+                    <div class="mw-brief">
+                        <span>达标 <strong>${week.doneDays}/${week.validDays.length}</strong></span>
+                        <span><strong>${wordsDisplay}</strong> 字</span>
+                        <span>平均 <strong>${week.avgPct}%</strong></span>
+                    </div>
+                </div>
+                <div class="mw-days">
+        `;
+        week.days.forEach(d => {
+            if (d.isFuture) return;
+            const met = d.words >= d.goal;
+            const hasData = d.words > 0;
+            let statusCls = 'miss', statusText = '❌断更';
+            if (met) { statusCls = 'done'; statusText = '✅达标'; }
+            else if (hasData) { statusCls = 'partial'; statusText = '⚠️未达标'; }
+            const dayLabel = d.isToday ? '今天' : '周' + getWeekDayShort(d.d);
+            html += `
+                <div class="mw-day-row">
+                    <span class="mw-day-label">${dayLabel}</span>
+                    <span class="mw-day-words">${d.words} / ${d.goal} 字</span>
+                    <span class="mw-day-status ${statusCls}">${statusText}</span>
+                </div>
+            `;
+        });
+        html += `
+                    <p class="mw-week-weak-period">🐌 最拖更时段：<strong>${week.weakPeriod}</strong></p>
+                </div>
+            </div>
+        `;
+    });
+    listEl.innerHTML = html;
+    const allDone = weeks.reduce((s, w) => s + w.doneDays, 0);
+    const allValid = weeks.reduce((s, w) => s + w.validDays.length, 0);
+    const allWords = weeks.reduce((s, w) => s + w.totalWords, 0);
+    const overallPct = allValid > 0 ? Math.round((allDone / allValid) * 100) : 0;
+    const allPeriodData = [
+        { name: '上午段', key: 'morning', total: 0, goalPerDay: splitDailyGoal(appData.dailyGoal).morning },
+        { name: '下午段', key: 'afternoon', total: 0, goalPerDay: splitDailyGoal(appData.dailyGoal).afternoon },
+        { name: '晚上段', key: 'evening', total: 0, goalPerDay: splitDailyGoal(appData.dailyGoal).evening }
+    ];
+    weeks.forEach(w => {
+        w.validDays.forEach(d => {
+            allPeriodData[0].total += d.morning;
+            allPeriodData[1].total += d.afternoon;
+            allPeriodData[2].total += d.evening;
+        });
+    });
+    let overallWeak = '--';
+    if (allValid > 0) {
+        let weakestRatio = Infinity;
+        allPeriodData.forEach(p => {
+            if (p.goalPerDay > 0) {
+                const ratio = p.total / (p.goalPerDay * allValid);
+                if (ratio < weakestRatio) {
+                    weakestRatio = ratio;
+                    overallWeak = p.name;
+                }
+            }
+        });
+    }
+    const suggestions = [];
+    if (overallPct >= 80) {
+        suggestions.push(`本月表现优秀，达标率 ${overallPct}%，继续保持！`);
+        suggestions.push('下个月可以尝试挑战更高的日更目标');
+    } else if (overallPct >= 50) {
+        suggestions.push(`本月达标率 ${overallPct}%，还有提升空间`);
+        suggestions.push(`${overallWeak}是你最薄弱的时段，建议调整写作节奏`);
+    } else {
+        suggestions.push(`本月达标率仅 ${overallPct}%，需要认真对待了`);
+        suggestions.push(`建议先保证${overallWeak}以外的时段稳定产出，再逐步攻克薄弱时段`);
+    }
+    const avgDaily = allValid > 0 ? Math.round(allWords / allValid) : 0;
+    const minGuarantee = Math.max(appData.dailyGoal * 0.7, 2000);
+    suggestions.push(`下月保底建议：日均不低于 ${minGuarantee} 字，争取全勤`);
+    const stockDays = getStockDays();
+    if (stockDays < appData.safetyThreshold) {
+        const needed = getChaptersNeeded();
+        suggestions.push(`存稿告急（仅${stockDays}天），下月优先补写${needed}章存稿打底`);
+    }
+    const wordsDisplay = allWords >= 10000 ? (allWords / 10000).toFixed(1) + '万' : allWords;
+    sugEl.innerHTML = `
+        <h4>📅 月度汇总 & 下月保底建议</h4>
+        <p>近4周共 <strong>${allDone}/${allValid}</strong> 天达标，累计 <strong>${wordsDisplay}</strong> 字，日均 <strong>${avgDaily}</strong> 字</p>
+        <p>最拖更时段：<strong>${overallWeak}</strong></p>
+        <ul>${suggestions.map(s => `<li>${s}</li>`).join('')}</ul>
+    `;
 }
 
 function renderWritingUI() {
@@ -1006,11 +1317,28 @@ function finishChapter() {
         showToast('提示', '编辑器为空，无需完成本章', 'info', 2000);
         return;
     }
+    const chapterNameBefore = document.getElementById('chapter-name').value || appData.chapterName;
     const increment = commitEditorWordsToToday();
     appData.todayChapters = (appData.todayChapters || 0) + 1;
     appData.lastSaveDate = getTodayStr();
     if (increment > 0) {
         addWritingSession('finish', increment);
+    } else {
+        const now = Date.now();
+        const duration = now - currentSessionStartTime;
+        const period = getTimePeriod();
+        const session = {
+            id: now,
+            type: 'finish',
+            words: 0,
+            duration: Math.max(60000, duration),
+            chapterName: chapterNameBefore || `第${appData.todayChapters}章`,
+            period,
+            time: formatTime(new Date(now))
+        };
+        appData.todaySessions = appData.todaySessions || [];
+        appData.todaySessions.push(session);
+        currentSessionStartTime = now;
     }
     editor.value = '';
     sessionStartWords = 0;

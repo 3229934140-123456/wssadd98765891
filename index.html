@@ -100,6 +100,7 @@
                             <h4>📋 今日写作会话</h4>
                             <span class="sessions-toggle" id="sessions-toggle">▼</span>
                         </div>
+                        <div class="chapter-analysis" id="chapter-analysis"></div>
                         <div class="sessions-body" id="sessions-body">
                             <p class="sessions-empty">还没有写作记录，开始码字吧~</p>
                         </div>
@@ -304,28 +305,41 @@
                 </div>
 
                 <div class="plan-section weekly-review-section">
-                    <h2>📊 近7天周复盘</h2>
-                    <div class="weekly-stats">
-                        <div class="stat-item">
-                            <p class="stat-label">达标天数</p>
-                            <p class="stat-value" id="wr-done-days">0 / 7</p>
-                        </div>
-                        <div class="stat-item">
-                            <p class="stat-label">总字数</p>
-                            <p class="stat-value" id="wr-total-words">0</p>
-                        </div>
-                        <div class="stat-item">
-                            <p class="stat-label">平均完成度</p>
-                            <p class="stat-value" id="wr-avg-pct">0%</p>
-                        </div>
-                        <div class="stat-item">
-                            <p class="stat-label">最易拖更时段</p>
-                            <p class="stat-value" id="wr-weak-period">--</p>
+                    <div class="wr-top-header">
+                        <h2>📊 复盘中心</h2>
+                        <div class="wr-view-switch">
+                            <button class="btn btn-sm active" data-view="week" onclick="switchReviewView('week')">周视图</button>
+                            <button class="btn btn-sm" data-view="month" onclick="switchReviewView('month')">月度视图</button>
                         </div>
                     </div>
-                    <div class="weekly-days-detail" id="wr-days-detail"></div>
-
-                    <div class="weekly-suggestion" id="wr-suggestion"></div>
+                    <div id="wr-week-view">
+                        <h3 style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;">近7天周复盘</h3>
+                        <div class="weekly-stats">
+                            <div class="stat-item">
+                                <p class="stat-label">达标天数</p>
+                                <p class="stat-value" id="wr-done-days">0 / 7</p>
+                            </div>
+                            <div class="stat-item">
+                                <p class="stat-label">总字数</p>
+                                <p class="stat-value" id="wr-total-words">0</p>
+                            </div>
+                            <div class="stat-item">
+                                <p class="stat-label">平均完成度</p>
+                                <p class="stat-value" id="wr-avg-pct">0%</p>
+                            </div>
+                            <div class="stat-item">
+                                <p class="stat-label">最易拖更时段</p>
+                                <p class="stat-value" id="wr-weak-period">--</p>
+                            </div>
+                        </div>
+                        <div class="weekly-days-detail" id="wr-days-detail"></div>
+                        <div class="weekly-suggestion" id="wr-suggestion"></div>
+                    </div>
+                    <div id="wr-month-view" style="display:none;">
+                        <h3 style="font-size:14px;color:var(--text-secondary);margin-bottom:12px;">月度周汇总</h3>
+                        <div class="month-weeks-list" id="month-weeks-list"></div>
+                        <div class="monthly-suggestion" id="monthly-suggestion"></div>
+                    </div>
                 </div>
 
                 <div class="plan-section stock-schedule-section">
