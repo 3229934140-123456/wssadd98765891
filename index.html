@@ -94,6 +94,17 @@
                             <p class="eta-sub">按 <span id="writing-speed">40</span> 字/分钟计算</p>
                         </div>
                     </div>
+
+                    <div class="sessions-card" id="sessions-card">
+                        <div class="sessions-header" id="sessions-header">
+                            <h4>📋 今日写作会话</h4>
+                            <span class="sessions-toggle" id="sessions-toggle">▼</span>
+                        </div>
+                        <div class="sessions-body" id="sessions-body">
+                            <p class="sessions-empty">还没有写作记录，开始码字吧~</p>
+                        </div>
+                        <div class="sessions-summary" id="sessions-summary"></div>
+                    </div>
                 </aside>
 
                 <div class="editor-main">
@@ -290,6 +301,29 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div class="plan-section weekly-review-section">
+                    <h2>📊 近7天周复盘</h2>
+                    <div class="weekly-stats">
+                        <div class="stat-item">
+                            <p class="stat-label">达标天数</p>
+                            <p class="stat-value" id="wr-done-days">0 / 7</p>
+                        </div>
+                        <div class="stat-item">
+                            <p class="stat-label">总字数</p>
+                            <p class="stat-value" id="wr-total-words">0</p>
+                        </div>
+                        <div class="stat-item">
+                            <p class="stat-label">平均完成度</p>
+                            <p class="stat-value" id="wr-avg-pct">0%</p>
+                        </div>
+                        <div class="stat-item">
+                            <p class="stat-label">最易拖更时段</p>
+                            <p class="stat-value" id="wr-weak-period">--</p>
+                        </div>
+                    </div>
+                    <div class="weekly-suggestion" id="wr-suggestion"></div>
                 </div>
 
                 <div class="plan-section calendar-section">
