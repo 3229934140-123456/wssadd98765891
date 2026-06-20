@@ -20,6 +20,7 @@ const DEFAULT_DATA = {
     morningDone: 0,
     afternoonDone: 0,
     eveningDone: 0,
+    todayChapters: 0,
     lastSaveDate: null
 };
 
@@ -52,8 +53,9 @@ const PLATFORM_IMPACT = {
 let appData = { ...DEFAULT_DATA };
 let historyData = [];
 let sessionStartWords = 0;
-let sessionStartTime = Date.now();
 let notificationPermission = 'default';
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth();
 
 function getTodayStr() {
     const d = new Date();
@@ -94,13 +96,22 @@ function checkDateReset() {
             historyData.push({
                 date: appData.lastSaveDate,
                 words: appData.todayWords,
-                goal: appData.dailyGoal
+                goal: appData.dailyGoal,
+                chapters: appData.todayChapters || 0
+            });
+        } else if (appData.lastSaveDate < today) {
+            historyData.push({
+                date: appData.lastSaveDate,
+                words: 0,
+                goal: appData.dailyGoal,
+                chapters: 0
             });
         }
         appData.todayWords = 0;
         appData.morningDone = 0;
         appData.afternoonDone = 0;
         appData.eveningDone = 0;
+        appData.todayChapters = 0;
         appData.editorContent = '';
         appData.chapterName = '';
         sessionStartWords = 0;
@@ -112,7 +123,7 @@ function checkDateReset() {
 function saveData() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(historyData.slice(-30)));
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(historyData.slice(-60)));
     } catch (e) {
         console.error('保存数据失败:', e);
     }
@@ -144,40 +155,66 @@ function calculateETA(remaining, speed) {
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
-function getConsecutiveLowDays() {
-    let count = 0;
-    const today = new Date();
-    for (let i = 1; i <= 7; i++) {
-        const checkDate = new Date(today);
-        checkDate.setDate(checkDate.getDate() - i);
-        const dateStr = getDateStr(checkDate);
-        const record = historyData.find(h => h.date === dateStr);
-        if (record && record.words < (record.goal || appData.dailyGoal) * 0.6) {
-            count++;
-        } else {
-            if (count > 0) break;
-        }
-    }
-    return count;
+function getYesterdayRecord() {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = getDateStr(yesterday);
+    return historyData.find(h => h.date === dateStr) || null;
 }
 
 function checkRiskLevel() {
-    const consecutive = getConsecutiveLowDays();
-    const todayProgress = appData.dailyGoal > 0 ? (appData.todayWords / appData.dailyGoal) * 100 : 0;
+    const todayWords = appData.todayWords;
+    const todayGoal = appData.dailyGoal;
+    const todayMet = todayWords >= todayGoal;
+    const yesterday = getYesterdayRecord();
+    const yesterdayWords = yesterday ? yesterday.words : 0;
+    const yesterdayGoal = yesterday ? yesterday.goal : todayGoal;
+    const yesterdayMet = yesterday ? yesterdayWords >= yesterdayGoal : false;
     const now = new Date();
     const updateParts = appData.updateTime.split(':');
     const updateH = parseInt(updateParts[0]);
     const hoursLeft = updateH - now.getHours();
+    const todayProgress = todayGoal > 0 ? (todayWords / todayGoal) * 100 : 0;
     let level = 'normal';
-    if (consecutive >= 2) level = 'danger';
-    else if (consecutive === 1 && todayProgress < 30 && hoursLeft < 6) level = 'danger';
-    else if (consecutive === 1 || (todayProgress < 50 && hoursLeft < 4)) level = 'warning';
-    return { level, consecutive, todayProgress, hoursLeft };
+    if (!todayMet && !yesterdayMet) {
+        if (todayProgress < 30 && hoursLeft < 6) level = 'danger';
+        else level = 'warning';
+    } else if (!todayMet && todayProgress < 50 && hoursLeft < 4) {
+        level = 'warning';
+    }
+    return {
+        level,
+        todayMet,
+        yesterdayMet,
+        todayWords,
+        todayGoal,
+        yesterdayWords,
+        yesterdayGoal,
+        todayProgress,
+        hoursLeft
+    };
 }
 
 function getStockDays() {
     if (appData.chaptersPerDay <= 0) return 0;
     return Math.floor(appData.stockChapters / appData.chaptersPerDay);
+}
+
+function getDepletionDate() {
+    const stockDays = getStockDays();
+    if (stockDays <= 0) return '今天！';
+    const d = new Date();
+    d.setDate(d.getDate() + stockDays);
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function getChaptersNeeded() {
+    const threshold = appData.safetyThreshold;
+    const stockDays = getStockDays();
+    if (stockDays >= threshold) return 0;
+    const deficit = threshold - stockDays;
+    const chaptersNeeded = deficit * appData.chaptersPerDay;
+    return chaptersNeeded;
 }
 
 function showToast(title, message, type = 'info', duration = 5000) {
@@ -206,29 +243,50 @@ function showRiskModal() {
     const modal = document.getElementById('risk-modal');
     const body = document.getElementById('modal-body');
     const risk = checkRiskLevel();
-    const consecutive = risk.consecutive || 1;
     const platform = appData.platform || '其他';
     const impact = PLATFORM_IMPACT[platform] || PLATFORM_IMPACT['其他'];
     const deficit = Math.max(0, appData.dailyGoal - appData.todayWords);
     const suggestions = [];
     if (deficit > 2000) {
-        suggestions.push(`今晚需要补 ${deficit}字，建议分2-3段写完`);
+        suggestions.push(`今晚需补 ${deficit} 字，建议分2-3段写完`);
         suggestions.push('先写一个完整场景，大约1500字左右，快速推进');
     } else if (deficit > 0) {
-        suggestions.push(`还差约 ${deficit}字，冲刺一下，1小时内可以完成`);
+        suggestions.push(`还差约 ${deficit} 字，冲刺一下即可完成`);
         suggestions.push('集中精力写完今天的章节结尾部分');
     } else {
         suggestions.push('今日任务已完成，可写明天的存稿');
     }
     suggestions.push('明天上午早点开始写，避免再次积压');
-    if (appData.stockChapters < appData.safetyThreshold) {
-        suggestions.push('存稿不足，写完今日后再写一章存稿');
+    const chaptersNeeded = getChaptersNeeded();
+    if (chaptersNeeded > 0) {
+        suggestions.push(`存稿不足安全线，建议额外补写 ${chaptersNeeded} 章存稿`);
     }
-    const todayDone = appData.dailyGoal > 0 ? Math.round((appData.todayWords / appData.dailyGoal) * 100) : 0;
+    const todayPct = risk.todayGoal > 0 ? Math.round((risk.todayWords / risk.todayGoal) * 100) : 0;
+    const ydPct = risk.yesterdayGoal > 0 ? Math.round((risk.yesterdayWords / risk.yesterdayGoal) * 100) : 0;
     const html = `
-        <h4>📊 风险详情</h4>
-        <p>您已连续 <strong style="color:var(--danger)">${consecutive}</strong> 天未达到日更目标的60%</p>
-        <p>今日完成度：<strong>${todayDone}%</strong>（${appData.todayWords}/${appData.dailyGoal}字）</p>
+        <h4>📊 近两日进度对比</h4>
+        <table class="risk-detail-table">
+            <thead>
+                <tr><th>日期</th><th>实际字数</th><th>目标字数</th><th>完成度</th><th>状态</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>今天</td>
+                    <td>${risk.todayWords}</td>
+                    <td>${risk.todayGoal}</td>
+                    <td class="${todayPct >= 100 ? 'highlight-ok' : 'highlight-danger'}">${todayPct}%</td>
+                    <td>${risk.todayMet ? '✅ 达标' : '❌ 未达标'}</td>
+                </tr>
+                <tr>
+                    <td>昨天</td>
+                    <td>${risk.yesterdayWords}</td>
+                    <td>${risk.yesterdayGoal}</td>
+                    <td class="${ydPct >= 100 ? 'highlight-ok' : 'highlight-danger'}">${ydPct}%</td>
+                    <td>${risk.yesterdayMet ? '✅ 达标' : '❌ 未达标'}</td>
+                </tr>
+            </tbody>
+        </table>
+        ${!risk.todayMet && !risk.yesterdayMet ? '<p style="color:var(--danger);font-weight:600;">⚠️ 今天和昨天均未达标，连续断更风险极高！</p>' : ''}
         <ul class="impact-list">
             <li>${impact.fullAttendance}</li>
             <li>${impact.ranking}</li>
@@ -252,6 +310,7 @@ function renderWritingUI() {
     document.getElementById('work-update-time-display').textContent = appData.updateTime || '未设置';
     document.getElementById('today-goal-words').textContent = appData.dailyGoal;
     document.getElementById('today-done-words').textContent = appData.todayWords;
+    document.getElementById('today-chapters-count').textContent = appData.todayChapters || 0;
     const percent = appData.dailyGoal > 0 ? Math.min(100, Math.round((appData.todayWords / appData.dailyGoal) * 100)) : 0;
     document.getElementById('today-progress-fill').style.width = `${percent}%`;
     document.getElementById('today-progress-percent').textContent = percent;
@@ -281,12 +340,12 @@ function renderWritingUI() {
     const tipIdx = (new Date().getDate() + Math.floor(appData.todayWords / 500)) % WRITING_TIPS.length;
     document.getElementById('daily-tip').textContent = WRITING_TIPS[tipIdx];
     const editor = document.getElementById('writing-editor');
-    if (editor.value !== appData.editorContent) {
+    if (editor.value !== (appData.editorContent || '')) {
         editor.value = appData.editorContent || '';
         updateEditorWordCount();
     }
     const cnInput = document.getElementById('chapter-name');
-    if (cnInput.value !== appData.chapterName) {
+    if (cnInput.value !== (appData.chapterName || '')) {
         cnInput.value = appData.chapterName || '';
     }
 }
@@ -303,19 +362,20 @@ function renderRiskCard() {
     } else if (risk.level === 'warning') {
         badge.textContent = '注意';
         badge.classList.add('warning');
-        const remaining = Math.max(0, appData.dailyGoal - appData.todayWords);
+        const remaining = Math.max(0, risk.todayGoal - risk.todayWords);
+        const yesterdayInfo = risk.yesterdayMet ? '昨日已达标' : `昨日仅写 ${risk.yesterdayWords} 字（未达标）`;
         content.innerHTML = `
-            <p class="risk-warning">⚠️ 进度偏慢，今日还差 ${remaining} 字未完成</p>
-            <p style="margin-top:8px;">建议集中精力，尽快完成今日段落。</p>
+            <p class="risk-warning">⚠️ 进度偏慢，今日还差 ${remaining} 字</p>
+            <p style="margin-top:6px;font-size:12px;">${yesterdayInfo}</p>
+            <p style="margin-top:6px;">建议集中精力，尽快完成今日段落。</p>
         `;
     } else {
         badge.textContent = '危险';
         badge.classList.add('danger');
-        const consecutive = risk.consecutive || 1;
         content.innerHTML = `
-            <p class="risk-danger">🚨 已连续 ${consecutive} 天未达标！</p>
-            <p style="margin-top:8px;color:var(--danger);">可能影响全勤及读者追更体验。</p>
-            <button class="btn btn-primary" style="margin-top:12px;padding:6px 12px;font-size:12px;" onclick="showRiskModal()">查看详情</button>
+            <p class="risk-danger">🚨 连续两日未达标！</p>
+            <p style="margin-top:6px;font-size:12px;">今天 ${risk.todayWords}/${risk.todayGoal} ｜ 昨天 ${risk.yesterdayWords}/${risk.yesterdayGoal}</p>
+            <button class="btn btn-primary" style="margin-top:10px;padding:6px 12px;font-size:12px;" onclick="showRiskModal()">查看详情</button>
         `;
     }
 }
@@ -325,9 +385,12 @@ function renderSafetyCard() {
     const threshold = appData.safetyThreshold;
     const barFill = document.getElementById('safety-bar-fill');
     const status = document.getElementById('safety-status');
+    const depletionEl = document.getElementById('depletion-date');
     document.getElementById('current-stock').textContent = appData.stockChapters;
     document.getElementById('stock-days').textContent = stockDays;
     document.getElementById('safety-line').textContent = threshold;
+    const depletionDate = getDepletionDate();
+    depletionEl.textContent = depletionDate;
     const percent = threshold > 0 ? Math.min(100, (stockDays / (threshold * 2)) * 100) : 0;
     barFill.style.width = `${percent}%`;
     barFill.className = 'safety-bar-fill';
@@ -336,24 +399,30 @@ function renderSafetyCard() {
     if (stockDays >= threshold * 2) {
         status.textContent = '存稿充足 🎉';
         status.classList.add('safe');
+        depletionEl.className = 'safety-value depletion-ok';
     } else if (stockDays >= threshold) {
         status.textContent = '存稿尚可';
         status.classList.add('safe');
+        depletionEl.className = 'safety-value depletion-ok';
     } else if (stockDays > 0) {
         barFill.classList.add('warning');
-        status.textContent = '存稿偏少 ⚠️';
+        const needed = getChaptersNeeded();
+        status.textContent = `存稿偏少 ⚠️ 建议补 ${needed} 章`;
         status.classList.add('warning');
+        depletionEl.className = 'safety-value depletion-warning';
         if (renderSafetyCard._warned !== todayKey) {
             renderSafetyCard._warned = todayKey;
-            showToast('存稿不足', `存稿仅够支撑 ${stockDays} 天，建议尽快补稿！`, 'warning');
+            showToast('存稿不足', `存稿仅够支撑 ${stockDays} 天（${depletionDate} 断粮），建议补写 ${needed} 章存稿`, 'warning');
         }
     } else {
         barFill.classList.add('danger');
-        status.textContent = '无存稿！🚨';
+        const needed = getChaptersNeeded();
+        status.textContent = `无存稿！🚨 建议补 ${needed} 章`;
         status.classList.add('danger');
+        depletionEl.className = 'safety-value depletion-danger';
         if (renderSafetyCard._warned !== todayKey) {
             renderSafetyCard._warned = todayKey;
-            showToast('无存稿警告', '您的存稿已用尽！今天务必要写！', 'danger');
+            showToast('无存稿警告', `存稿已用尽！今天 ${appData.updateTime} 前务必要写！建议补 ${needed} 章`, 'danger');
         }
     }
 }
@@ -370,14 +439,20 @@ function renderHistoryChart() {
         const dateStr = getDateStr(d);
         const record = historyData.find(h => h.date === dateStr);
         let words = 0;
-        if (i === 0) words = appData.todayWords;
-        else if (record) words = record.words;
+        let goal = appData.dailyGoal;
+        if (i === 0) {
+            words = appData.todayWords;
+            goal = appData.dailyGoal;
+        } else if (record) {
+            words = record.words;
+            goal = record.goal || appData.dailyGoal;
+        }
         if (words > maxWords) maxWords = words;
         bars.push({
             label: weekDays[d.getDay()],
             words,
             isToday: i === 0,
-            goal: record ? record.goal : appData.dailyGoal
+            goal
         });
     }
     chart.innerHTML = bars.map(b => {
@@ -396,6 +471,110 @@ function renderHistoryChart() {
     }).join('');
 }
 
+function renderCalendar() {
+    const grid = document.getElementById('calendar-grid');
+    const monthLabel = document.getElementById('cal-month-label');
+    monthLabel.textContent = `${calendarYear}年${calendarMonth + 1}月`;
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    let html = weekdays.map(w => `<div class="cal-weekday">${w}</div>`).join('');
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    let startDow = firstDay.getDay();
+    if (startDow === 0) startDow = 7;
+    startDow -= 1;
+    for (let i = 0; i < startDow; i++) {
+        html += '<div class="cal-day cal-empty"></div>';
+    }
+    const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    const todayStr = getTodayStr();
+    const todayDate = new Date();
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateObj = new Date(calendarYear, calendarMonth, d);
+        const dateStr = getDateStr(dateObj);
+        const isToday = dateStr === todayStr;
+        const isFuture = dateObj > todayDate;
+        let cls = 'cal-day';
+        let wordsLabel = '';
+        if (isFuture) {
+            cls += ' cal-future';
+        } else {
+            let words = 0;
+            let goal = appData.dailyGoal;
+            if (isToday) {
+                words = appData.todayWords;
+                goal = appData.dailyGoal;
+            } else {
+                const record = historyData.find(h => h.date === dateStr);
+                if (record) {
+                    words = record.words;
+                    goal = record.goal || appData.dailyGoal;
+                }
+            }
+            if (words >= goal) {
+                cls += ' cal-done';
+            } else if (words > 0) {
+                cls += ' cal-partial';
+            } else {
+                cls += ' cal-miss';
+            }
+            if (words > 0) {
+                wordsLabel = `<span class="cal-day-words">${words >= 1000 ? (words / 1000).toFixed(1) + 'k' : words}</span>`;
+            }
+        }
+        if (isToday) cls += ' cal-today';
+        html += `<div class="${cls}" data-date="${dateStr}" onclick="showCalendarDetail('${dateStr}')"><span class="cal-day-num">${d}</span>${wordsLabel}</div>`;
+    }
+    grid.innerHTML = html;
+}
+
+function showCalendarDetail(dateStr) {
+    const detail = document.getElementById('calendar-detail');
+    const titleEl = document.getElementById('detail-date-title');
+    const bodyEl = document.getElementById('detail-body');
+    const parts = dateStr.split('-');
+    titleEl.textContent = `${parseInt(parts[1])}月${parseInt(parts[2])}日`;
+    const todayStr = getTodayStr();
+    let words = 0;
+    let goal = appData.dailyGoal;
+    let chapters = 0;
+    if (dateStr === todayStr) {
+        words = appData.todayWords;
+        goal = appData.dailyGoal;
+        chapters = appData.todayChapters || 0;
+    } else {
+        const record = historyData.find(h => h.date === dateStr);
+        if (record) {
+            words = record.words;
+            goal = record.goal || appData.dailyGoal;
+            chapters = record.chapters || 0;
+        }
+    }
+    const pct = goal > 0 ? Math.round((words / goal) * 100) : 0;
+    const isFuture = new Date(dateStr) > new Date();
+    let statusText = '';
+    let statusClass = '';
+    if (isFuture) {
+        statusText = '📅 尚未到来';
+        statusClass = 'color:var(--text-muted)';
+    } else if (words >= goal) {
+        statusText = '✅ 达标';
+        statusClass = 'color:var(--success)';
+    } else if (words > 0) {
+        statusText = '⚠️ 未达标';
+        statusClass = 'color:var(--warning)';
+    } else {
+        statusText = '❌ 断更';
+        statusClass = 'color:var(--danger)';
+    }
+    bodyEl.innerHTML = `
+        <p><strong>目标字数：</strong>${goal} 字</p>
+        <p><strong>实际字数：</strong>${words} 字</p>
+        <p><strong>完成度：</strong>${pct}%</p>
+        ${chapters > 0 ? `<p><strong>完成章节：</strong>${chapters} 章</p>` : ''}
+        <p style="${statusClass};font-weight:600;margin-top:8px;">${statusText}</p>
+    `;
+    detail.style.display = 'block';
+}
+
 function renderPlanUI() {
     document.getElementById('work-title').value = appData.workTitle || '';
     document.getElementById('work-platform').value = appData.platform || '';
@@ -410,6 +589,7 @@ function renderPlanUI() {
         btn.classList.toggle('active', parseInt(btn.dataset.goal) === appData.dailyGoal);
     });
     updatePreviewBlocks();
+    renderCalendar();
 }
 
 function updatePreviewBlocks() {
@@ -430,41 +610,71 @@ function updateEditorWordCount() {
     appData.editorContent = content;
 }
 
-function saveProgress(showMsg = true) {
+function commitEditorWordsToToday() {
     const editor = document.getElementById('writing-editor');
-    const chapterName = document.getElementById('chapter-name').value;
     const content = editor.value;
-    const totalWords = countWords(content);
-    const period = getTimePeriod();
-    const prevTotal = appData.morningDone + appData.afternoonDone + appData.eveningDone;
-    const newlyAdded = Math.max(0, totalWords - prevTotal);
-    if (newlyAdded > 0) {
-        if (period === 'morning') appData.morningDone += newlyAdded;
-        else if (period === 'afternoon') appData.afternoonDone += newlyAdded;
-        else appData.eveningDone += newlyAdded;
+    const editorWords = countWords(content);
+    const increment = Math.max(0, editorWords - sessionStartWords);
+    if (increment > 0) {
+        const period = getTimePeriod();
+        if (period === 'morning') appData.morningDone += increment;
+        else if (period === 'afternoon') appData.afternoonDone += increment;
+        else appData.eveningDone += increment;
+        appData.todayWords = appData.morningDone + appData.afternoonDone + appData.eveningDone;
     }
-    appData.todayWords = appData.morningDone + appData.afternoonDone + appData.eveningDone;
+    sessionStartWords = editorWords;
+    return increment;
+}
+
+function saveProgress(showMsg = true) {
+    const chapterName = document.getElementById('chapter-name').value;
+    const increment = commitEditorWordsToToday();
     appData.chapterName = chapterName;
     appData.lastSaveDate = getTodayStr();
-    sessionStartWords = totalWords;
     saveData();
     renderWritingUI();
     if (showMsg) {
-        if (newlyAdded > 0) {
-            showToast('保存成功', `本次新增 ${newlyAdded} 字，累计今日 ${appData.todayWords} 字`, 'info', 3000);
+        if (increment > 0) {
+            showToast('保存成功', `本次新增 ${increment} 字，累计今日 ${appData.todayWords} 字`, 'info', 3000);
         } else {
             showToast('已保存', '进度已保存，继续加油！', 'info', 2000);
         }
     }
     const risk = checkRiskLevel();
-    if (risk.level === 'danger' && risk.consecutive >= 2) {
+    if (risk.level === 'danger') {
         setTimeout(showRiskModal, 600);
     }
     const stockDays = getStockDays();
-    if (stockDays < appData.safetyThreshold && stockDays > 0) {
+    if (stockDays < appData.safetyThreshold) {
+        const needed = getChaptersNeeded();
         setTimeout(() => {
-            showToast('存稿提醒', `存稿仅够 ${stockDays} 天，建议多写一章存稿`, 'warning');
+            showToast('存稿提醒', `存稿仅够 ${stockDays} 天，建议补写 ${needed} 章存稿`, 'warning');
         }, 1000);
+    }
+}
+
+function finishChapter() {
+    const editor = document.getElementById('writing-editor');
+    const content = editor.value;
+    if (!content.trim()) {
+        showToast('提示', '编辑器为空，无需完成本章', 'info', 2000);
+        return;
+    }
+    const increment = commitEditorWordsToToday();
+    appData.todayChapters = (appData.todayChapters || 0) + 1;
+    appData.lastSaveDate = getTodayStr();
+    saveData();
+    editor.value = '';
+    sessionStartWords = 0;
+    document.getElementById('chapter-name').value = '';
+    appData.editorContent = '';
+    appData.chapterName = '';
+    updateEditorWordCount();
+    renderWritingUI();
+    showToast('本章完成', `第 ${appData.todayChapters} 章已保存（+${increment}字），累计今日 ${appData.todayWords} 字。继续写下一章吧！`, 'info', 4000);
+    const risk = checkRiskLevel();
+    if (risk.level === 'danger') {
+        setTimeout(showRiskModal, 800);
     }
 }
 
@@ -497,6 +707,7 @@ function initEditor() {
         appData.chapterName = e.target.value;
     });
     document.getElementById('save-btn').addEventListener('click', () => saveProgress(true));
+    document.getElementById('finish-chapter-btn').addEventListener('click', finishChapter);
     document.getElementById('clear-btn').addEventListener('click', () => {
         if (confirm('确定要清空当前编辑器内容吗？（已保存的今日进度不会丢失）')) {
             editor.value = '';
@@ -530,9 +741,11 @@ function initPlan() {
         updatePreviewBlocks();
     });
     document.getElementById('save-plan-btn').addEventListener('click', () => {
+        const newGoal = parseInt(document.getElementById('daily-goal').value) || 4000;
+        const oldGoal = appData.dailyGoal;
         appData.workTitle = document.getElementById('work-title').value.trim();
         appData.platform = document.getElementById('work-platform').value;
-        appData.dailyGoal = parseInt(document.getElementById('daily-goal').value) || 4000;
+        appData.dailyGoal = newGoal;
         appData.updateTime = document.getElementById('update-time').value || '20:00';
         appData.chaptersPerDay = parseInt(document.getElementById('chapters-per-day').value) || 1;
         appData.stockChapters = parseInt(document.getElementById('stock-chapters').value) || 0;
@@ -543,6 +756,16 @@ function initPlan() {
         appData.morningGoal = split.morning;
         appData.afternoonGoal = split.afternoon;
         appData.eveningGoal = split.evening;
+        if (newGoal !== oldGoal) {
+            const totalDone = appData.morningDone + appData.afternoonDone + appData.eveningDone;
+            if (totalDone > 0) {
+                const ratio = appData.dailyGoal > 0 ? totalDone / appData.dailyGoal : 0;
+                appData.morningDone = Math.round(split.morning * Math.min(ratio, 1));
+                appData.afternoonDone = Math.round(split.afternoon * Math.min(ratio, 1));
+                appData.eveningDone = totalDone - appData.morningDone - appData.afternoonDone;
+                if (appData.eveningDone < 0) appData.eveningDone = 0;
+            }
+        }
         saveData();
         renderWritingUI();
         showToast('计划已保存', '您的写作计划已更新，坚持就是胜利！', 'info', 3000);
@@ -560,11 +783,33 @@ function initPlan() {
                 morningDone: appData.morningDone,
                 afternoonDone: appData.afternoonDone,
                 eveningDone: appData.eveningDone,
+                todayChapters: appData.todayChapters,
                 lastSaveDate: appData.lastSaveDate
             };
             renderPlanUI();
             saveData();
         }
+    });
+    document.getElementById('cal-prev').addEventListener('click', () => {
+        calendarMonth--;
+        if (calendarMonth < 0) {
+            calendarMonth = 11;
+            calendarYear--;
+        }
+        renderCalendar();
+        document.getElementById('calendar-detail').style.display = 'none';
+    });
+    document.getElementById('cal-next').addEventListener('click', () => {
+        calendarMonth++;
+        if (calendarMonth > 11) {
+            calendarMonth = 0;
+            calendarYear++;
+        }
+        renderCalendar();
+        document.getElementById('calendar-detail').style.display = 'none';
+    });
+    document.getElementById('detail-close').addEventListener('click', () => {
+        document.getElementById('calendar-detail').style.display = 'none';
     });
 }
 
@@ -620,15 +865,16 @@ function init() {
     requestNotificationPermission();
     setTimeout(() => {
         const risk = checkRiskLevel();
-        if (risk.level === 'danger' && risk.consecutive >= 2) {
+        if (risk.level === 'danger') {
             showRiskModal();
         } else if (risk.level === 'warning') {
             showToast('进度提醒', '今天的更新任务还没完成哦~', 'warning', 4000);
         }
         const stockDays = getStockDays();
-        if (stockDays < appData.safetyThreshold && stockDays > 0) {
+        if (stockDays < appData.safetyThreshold) {
+            const needed = getChaptersNeeded();
             setTimeout(() => {
-                showToast('存稿提醒', `存稿仅够支撑 ${stockDays} 天`, 'warning');
+                showToast('存稿提醒', `存稿仅够支撑 ${stockDays} 天，建议补写 ${needed} 章存稿`, 'warning');
             }, 2000);
         }
     }, 1500);

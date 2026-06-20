@@ -40,7 +40,7 @@
                         <div class="progress-bar">
                             <div class="progress-fill" id="today-progress-fill" style="width: 0%"></div>
                         </div>
-                        <p class="progress-text">完成度 <span id="today-progress-percent">0</span>%</p>
+                        <p class="progress-text">完成度 <span id="today-progress-percent">0</span>% ｜ 已完成 <span id="today-chapters-count">0</span> 章</p>
                     </div>
 
                     <div class="time-blocks">
@@ -104,12 +104,13 @@
                         </div>
                         <div class="editor-actions">
                             <button class="btn btn-secondary" id="clear-btn">清空</button>
+                            <button class="btn btn-accent" id="finish-chapter-btn">📖 完成本章</button>
                             <button class="btn btn-primary" id="save-btn">💾 保存进度</button>
                         </div>
                     </div>
-                    <textarea 
-                        id="writing-editor" 
-                        class="writing-editor" 
+                    <textarea
+                        id="writing-editor"
+                        class="writing-editor"
                         placeholder="开始码字吧，今天也要加油哦~ 每一个字都是通往完结的脚印。"></textarea>
                     <div class="chapter-input">
                         <label for="chapter-name">章节标题：</label>
@@ -137,11 +138,15 @@
                             </div>
                             <div class="safety-item">
                                 <span class="safety-label">可撑天数</span>
-                                <span class="safety-value" id="stock-days">0</span> 天
+                                <span class="safety-value"><span id="stock-days">0</span> 天</span>
                             </div>
                             <div class="safety-item">
                                 <span class="safety-label">安全线</span>
                                 <span class="safety-value"><span id="safety-line">3</span> 天</span>
+                            </div>
+                            <div class="safety-item">
+                                <span class="safety-label">预计断粮</span>
+                                <span class="safety-value" id="depletion-date">--</span>
                             </div>
                         </div>
                         <div class="safety-bar">
@@ -286,6 +291,31 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="plan-section calendar-section">
+                    <div class="calendar-header">
+                        <h2>📅 写作日历</h2>
+                        <div class="calendar-nav">
+                            <button class="btn btn-secondary btn-sm" id="cal-prev">◀</button>
+                            <span id="cal-month-label">2026年6月</span>
+                            <button class="btn btn-secondary btn-sm" id="cal-next">▶</button>
+                        </div>
+                    </div>
+                    <div class="calendar-legend">
+                        <span class="legend-item"><span class="legend-dot legend-done"></span>达标</span>
+                        <span class="legend-item"><span class="legend-dot legend-partial"></span>未达标</span>
+                        <span class="legend-item"><span class="legend-dot legend-miss"></span>断更</span>
+                        <span class="legend-item"><span class="legend-dot legend-future"></span>未到</span>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+                    <div class="calendar-detail" id="calendar-detail" style="display:none;">
+                        <div class="detail-header">
+                            <h4 id="detail-date-title">--</h4>
+                            <button class="detail-close" id="detail-close">×</button>
+                        </div>
+                        <div class="detail-body" id="detail-body"></div>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
@@ -300,7 +330,7 @@
     </div>
 
     <div class="modal-overlay" id="risk-modal">
-        <div class="modal">
+        <div class="modal modal-wide">
             <div class="modal-header danger">
                 <h3>🚨 断更风险提醒</h3>
                 <button class="modal-close" id="modal-close">×</button>

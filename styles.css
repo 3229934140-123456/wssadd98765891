@@ -422,6 +422,26 @@ body {
     color: var(--text-primary);
 }
 
+.btn-accent {
+    background: linear-gradient(135deg, var(--accent), #f97316);
+    color: white;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-accent:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.btn-accent:active {
+    transform: translateY(0);
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
 .btn-large {
     padding: 12px 28px;
     font-size: 15px;
@@ -1099,6 +1119,238 @@ body {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
+}
+
+.modal-wide {
+    max-width: 560px;
+}
+
+.risk-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+}
+
+.risk-detail-table th,
+.risk-detail-table td {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    text-align: center;
+}
+
+.risk-detail-table th {
+    background: var(--bg-sidebar);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.risk-detail-table td {
+    color: var(--text-primary);
+}
+
+.risk-detail-table .highlight-danger {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.risk-detail-table .highlight-ok {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.calendar-header h2 {
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#cal-month-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 100px;
+    text-align: center;
+}
+
+.calendar-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-done { background: var(--success); }
+.legend-partial { background: var(--warning); }
+.legend-miss { background: var(--danger); }
+.legend-future { background: var(--border); }
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.cal-weekday {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 6px 0;
+}
+
+.cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    border: 1px solid transparent;
+}
+
+.cal-day:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.cal-day.cal-empty {
+    cursor: default;
+}
+
+.cal-day.cal-empty:hover {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.cal-day.cal-today {
+    border: 2px solid var(--primary);
+    font-weight: 700;
+}
+
+.cal-day.cal-done {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.cal-day.cal-partial {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.cal-day.cal-miss {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.cal-day.cal-future {
+    background: var(--bg-sidebar);
+    color: var(--text-muted);
+}
+
+.cal-day-num {
+    font-size: 13px;
+    line-height: 1;
+}
+
+.cal-day-words {
+    font-size: 9px;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+.calendar-detail {
+    margin-top: 16px;
+    background: var(--bg-sidebar);
+    border-radius: var(--radius);
+    padding: 16px;
+    border: 1px solid var(--border);
+}
+
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.detail-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.detail-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.detail-close:hover {
+    color: var(--text-primary);
+}
+
+.detail-body p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    line-height: 1.7;
+}
+
+.detail-body strong {
+    color: var(--text-primary);
+}
+
+.depletion-danger {
+    color: var(--danger) !important;
+    font-weight: 600;
+}
+
+.depletion-warning {
+    color: var(--warning) !important;
+    font-weight: 600;
+}
+
+.depletion-ok {
+    color: var(--success) !important;
+    font-weight: 500;
 }
 
 @media (max-width: 1200px) {
